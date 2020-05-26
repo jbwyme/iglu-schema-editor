@@ -112,7 +112,26 @@ const igluApi = {
       case 200:
         return results.json();
       default:
-        throw new Error(`Unexpected response status: ${results.status}`);
+        throw new Error(`Unexpected response status: ${results.status} - ${await results.text()}`);
+    }
+  },
+
+  async put(registryUrl: string, schema: Schema, writeKey?: string) {
+    const {name, format, version} = schema.self;
+    const url = `${registryUrl}/${name}/${format}/${version}`;
+    const headers = new Headers();
+    headers.append("Content-Type", "application/json");
+    if (writeKey) {
+      headers.append("apikey", writeKey);
+    }
+    const results = await fetch(url, {method: 'PUT', body: JSON.stringify({entity_type: "event", schema_definition: schema}), headers});
+    console.log(results);
+    switch (results.status) {
+      case 200:
+      case 201:
+        return results.json();
+      default:
+        throw new Error(`Unexpected response status: ${results.status} - ${await results.text()}`);
     }
   }
 }
@@ -136,8 +155,9 @@ type Schema = {
 }
 
 function App() {
-  const [igluRegistryUrl, setIgluRegistryUrl] = useState("https://api.iterative.ly/iglu/schemas/ly.iterative.457f991c-9fec-4ed6-8c5e-8fde92fac55d");
-  const [igluRegistryReadKey, setIgluRegistryReadKey] = useState("bQFPmu6Vg80LaMuSNipdB0WJ5EH6QvVD");
+  const [igluRegistryUrl, setIgluRegistryUrl] = useState("https://mixpanel.com/api/app/iglu/schemas/com.mixpanel.project.1939595/");
+  const [igluRegistryReadKey, setIgluRegistryReadKey] = useState("");
+  const [igluRegistryWriteKey, setIgluRegistryWriteKey] = useState("");
 
   const [isConnected, setIsConnected] = useState(false);
   const [schemaList, setSchemaList] = useState<Schema[]>([]);
@@ -154,6 +174,17 @@ function App() {
 
   const editSchema = (schema: Schema) => {
     setEditingSchema(schema);
+  }
+
+  const persistSchema = async ({formData}: {formData: any}) => {
+    formData.properties = formData.properties.reduce((acc: any, cur: any) => {
+      const name = cur.name;
+      delete cur.name;
+      acc[name] = cur;
+      return acc;
+    }, {});
+    const results = await igluApi.put(igluRegistryUrl, formData, igluRegistryWriteKey);
+    console.log(results);
   }
 
   let editor;
@@ -173,7 +204,7 @@ function App() {
         formData={formData}
         uiSchema={uiSchema}
         onChange={log("changed")}
-        onSubmit={log("submitted")}
+        onSubmit={persistSchema}
         onError={log("errors")} />
     </div>
   }
@@ -190,7 +221,7 @@ function App() {
   const disconnectedView = <div>
     <input type="text" placeholder="Iglu Registry URL" value={igluRegistryUrl} onChange={e => setIgluRegistryUrl(e.target.value)} />
     <input type="password" placeholder="Iglu Registry Read Key" value={igluRegistryReadKey} onChange={e => setIgluRegistryReadKey(e.target.value)} />
-    <input type="password" placeholder="Iglu Registry Write Key" />
+    <input type="password" placeholder="Iglu Registry Write Key" value={igluRegistryWriteKey} onChange={e => setIgluRegistryWriteKey(e.target.value)}  />
     <button onClick={getSchemaList}>Connect</button>
   </div>;
 
